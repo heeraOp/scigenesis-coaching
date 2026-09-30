@@ -29,7 +29,7 @@ import ManageCourse from "./pages/ManageCourse";
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/scigenesis-coaching">
       <Routes>
 
         {/* =====================================================
