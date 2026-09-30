@@ -1,0 +1,236 @@
+/* =========================================
+   NAVBAR
+   ========================================= */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  width: 100%;
+
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--border);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+
+/* =========================================
+   NAVBAR CONTAINER
+   ========================================= */
+
+.container {
+  width: min(100% - 40px, var(--container));
+  margin: 0 auto;
+}
+
+.navbar {
+  min-height: var(--navbar-height);
+
+  display: flex;
+  align-items: center;
+
+  gap: 28px;
+}
+
+
+/* =========================================
+   BRAND
+   ========================================= */
+
+.brand {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  margin-right: auto;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 12px;
+
+  background: var(--primary);
+  color: var(--text-on-primary);
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.brand strong {
+  display: block;
+
+  color: var(--primary-dark);
+
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.brand span {
+  display: block;
+
+  margin-top: 3px;
+
+  color: var(--text-muted);
+
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+
+/* =========================================
+   NAVIGATION LINKS
+   ========================================= */
+
+.nav-links {
+  display: flex;
+  align-items: center;
+
+  gap: 22px;
+}
+
+.nav-links a {
+  position: relative;
+
+  color: var(--text-muted);
+
+  font-size: 14px;
+  font-weight: 500;
+
+  transition:
+    color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.nav-links a:hover {
+  color: var(--primary);
+}
+
+.nav-links a.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+
+/* Active link indicator */
+
+.nav-links a.active::after {
+  content: "";
+
+  position: absolute;
+
+  left: 0;
+  right: 0;
+  bottom: -8px;
+
+  height: 2px;
+
+  border-radius: var(--radius-full);
+
+  background: var(--accent);
+}
+
+
+/* =========================================
+   ENQUIRY BUTTON
+   ========================================= */
+
+.nav-cta {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 11px 18px;
+
+  border-radius: 10px;
+
+  background: var(--primary);
+  color: var(--text-on-primary);
+
+  font-size: 14px;
+  font-weight: 700;
+
+  white-space: nowrap;
+
+  transition:
+    background var(--transition-normal),
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.nav-cta:hover {
+  background: var(--primary-dark);
+
+  transform: translateY(-1px);
+
+  box-shadow: var(--shadow-sm);
+}
+
+
+/* =========================================
+   TABLET
+   ========================================= */
+
+@media (max-width: 1050px) {
+  .navbar {
+    gap: 18px;
+  }
+
+  .nav-links {
+    gap: 15px;
+  }
+
+  .nav-links a {
+    font-size: 13px;
+  }
+}
+
+
+/* =========================================
+   MOBILE
+   ========================================= */
+
+@media (max-width: 850px) {
+  .nav-links {
+    display: none;
+  }
+
+  .navbar {
+    min-height: 68px;
+  }
+}
+
+
+@media (max-width: 480px) {
+  .container {
+    width: min(100% - 28px, var(--container));
+  }
+
+  .brand strong {
+    font-size: 14px;
+  }
+
+  .brand span {
+    font-size: 10px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .nav-cta {
+    padding: 10px 13px;
+
+    font-size: 12px;
+  }
+}

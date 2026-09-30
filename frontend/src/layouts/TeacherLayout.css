@@ -1,0 +1,224 @@
+.teacher-layout {
+  min-height: 100vh;
+  display: flex;
+  background: #f5f7fb;
+}
+
+/* ================================
+   SIDEBAR
+================================ */
+
+.teacher-sidebar {
+  width: 260px;
+  min-height: 100vh;
+  background: #111827;
+  color: white;
+
+  display: flex;
+  flex-direction: column;
+
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/* Brand */
+
+.teacher-brand {
+  padding: 24px 20px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.teacher-brand-mark {
+  width: 42px;
+  height: 42px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+
+  background: white;
+  color: #111827;
+
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.teacher-brand strong {
+  display: block;
+  font-size: 14px;
+}
+
+.teacher-brand span {
+  display: block;
+  margin-top: 4px;
+
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* ================================
+   NAVIGATION
+================================ */
+
+.teacher-nav {
+  flex: 1;
+  padding: 20px 12px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.teacher-nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  padding: 12px 14px;
+
+  border-radius: 8px;
+
+  color: #d1d5db;
+  text-decoration: none;
+
+  font-size: 14px;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.teacher-nav a span {
+  width: 20px;
+  text-align: center;
+}
+
+.teacher-nav a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.teacher-nav a.active {
+  background: white;
+  color: #111827;
+  font-weight: 600;
+}
+
+/* ================================
+   SIDEBAR BOTTOM
+================================ */
+
+.teacher-sidebar-bottom {
+  padding: 16px 12px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.teacher-sidebar-bottom a {
+  padding: 11px 14px;
+
+  color: #d1d5db;
+  text-decoration: none;
+
+  border-radius: 8px;
+
+  font-size: 13px;
+}
+
+.teacher-sidebar-bottom a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+/* ================================
+   MAIN
+================================ */
+
+.teacher-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Topbar */
+
+.teacher-topbar {
+  background: white;
+
+  padding: 24px 32px;
+
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.teacher-topbar h1 {
+  margin: 0;
+
+  font-size: 24px;
+  color: #111827;
+}
+
+.teacher-topbar p {
+  margin: 6px 0 0;
+
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Content */
+
+.teacher-content {
+  padding: 32px;
+}
+
+/* ================================
+   MOBILE
+================================ */
+
+@media (max-width: 800px) {
+
+  .teacher-layout {
+    display: block;
+  }
+
+  .teacher-sidebar {
+    width: 100%;
+    height: auto;
+    min-height: auto;
+
+    position: relative;
+  }
+
+  .teacher-nav {
+    flex-direction: row;
+    overflow-x: auto;
+
+    padding: 10px;
+  }
+
+  .teacher-nav a {
+    flex: 0 0 auto;
+  }
+
+  .teacher-sidebar-bottom {
+    display: none;
+  }
+
+  .teacher-topbar {
+    padding: 20px;
+  }
+
+  .teacher-content {
+    padding: 20px;
+  }
+}

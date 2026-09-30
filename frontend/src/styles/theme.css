@@ -1,0 +1,140 @@
+:root {
+  /* =========================================
+     BRAND COLORS
+     ========================================= */
+
+  --primary: #123b73;
+  --primary-dark: #0b2850;
+  --primary-light: #eaf2ff;
+
+  --accent: #f4a62a;
+  --accent-dark: #d88908;
+
+
+  /* =========================================
+     TEXT COLORS
+     ========================================= */
+
+  --text: #172033;
+  --text-muted: #667085;
+  --text-light: #98a2b3;
+
+  --text-on-primary: #ffffff;
+  --text-on-accent: #172033;
+
+
+  /* =========================================
+     BACKGROUND COLORS
+     ========================================= */
+
+  --background: #ffffff;
+  --surface: #f7f9fc;
+  --surface-hover: #f1f5f9;
+
+  --background-dark: #0b2850;
+
+
+  /* =========================================
+     BORDER
+     ========================================= */
+
+  --border: #e4e7ec;
+  --border-light: #eef1f5;
+
+
+  /* =========================================
+     STATUS COLORS
+     ========================================= */
+
+  --success: #16803c;
+  --success-light: #eaf7ef;
+
+  --warning: #f79009;
+  --warning-light: #fff4e5;
+
+  --danger: #d92d20;
+  --danger-light: #fef0ef;
+
+  --info: #1570ef;
+  --info-light: #eff8ff;
+
+
+  /* =========================================
+     BORDER RADIUS
+     ========================================= */
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  --radius-full: 999px;
+
+
+  /* =========================================
+     SHADOWS
+     ========================================= */
+
+  --shadow-sm:
+    0 2px 8px rgba(16, 24, 40, 0.06);
+
+  --shadow-md:
+    0 8px 24px rgba(16, 24, 40, 0.08);
+
+  --shadow-lg:
+    0 16px 40px rgba(16, 24, 40, 0.12);
+
+
+  /* =========================================
+     LAYOUT
+     ========================================= */
+
+  --container: 1200px;
+
+  --navbar-height: 76px;
+
+
+  /* =========================================
+     SPACING
+     ========================================= */
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+
+  /* =========================================
+     TYPOGRAPHY
+     ========================================= */
+
+  --font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+  --font-size-3xl: 42px;
+  --font-size-4xl: 56px;
+
+
+  /* =========================================
+     TRANSITIONS
+     ========================================= */
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
