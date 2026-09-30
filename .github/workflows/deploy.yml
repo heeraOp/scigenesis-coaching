@@ -40,6 +40,9 @@ jobs:
         run: npm run build
         env:
           VITE_APPS_SCRIPT_URL: ${{ vars.VITE_APPS_SCRIPT_URL }}
+        
+      - name: Configure SPA fallback
+        run: cp frontend/dist/index.html frontend/dist/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
