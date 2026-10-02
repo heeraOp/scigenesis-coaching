@@ -5,6 +5,7 @@ import type {
   KeyboardEvent,
 } from "react";
 import { useEffect, useState } from "react";
+import { getSessionToken } from "../services/auth";
 
 interface CourseData {
   course_id?: string;
@@ -24,418 +25,365 @@ interface CourseOption {
   title: string;
 }
 
-/*
- * Apps Script Web App URL
- *
- * Set this in:
- *
- * frontend/.env.local
- *
- * VITE_APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
- */
 const API_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
-const DEFAULT_COURSE: CourseData = {
-  title: "Class XI Foundation Course",
-  duration: "5 Months",
-  startDate: "2026-06-04",
-  boards: "CBSE & COHSEM",
-  timing: "4:30 PM – 7:15 PM",
-  subjects: ["Physics", "Chemistry", "Biology"],
+const EMPTY_COURSE: CourseData = {
+  title: "",
+  duration: "",
+  startDate: "",
+  boards: "",
+  timing: "",
+  subjects: [],
   image: "",
+  image_file_id: "",
+  image_url: "",
 };
 
 function ManageCourse() {
-  const [course, setCourse] =
-    useState<CourseData>(DEFAULT_COURSE);
+  const [course, setCourse] = useState<CourseData>({
+    ...EMPTY_COURSE,
+  });
 
-  const [courses, setCourses] =
-    useState<CourseOption[]>([]);
-
-  const [selectedCourseId, setSelectedCourseId] =
-    useState<string>("");
-
-  const [isNewCourse, setIsNewCourse] =
-    useState(false);
-
-  const [newSubject, setNewSubject] =
-    useState("");
-
-  const [saveMessage, setSaveMessage] =
-    useState("");
-
-  const [imageName, setImageName] =
-    useState("");
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [isNewCourse, setIsNewCourse] = useState(false);
+  const [newSubject, setNewSubject] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [imageName, setImageName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   /*
-   * Load all available courses from Apps Script.
+   * ---------------------------------------------------------
+   * COMMON HELPERS
+   * ---------------------------------------------------------
    */
+
+  const requireSessionToken = () => {
+    const token = getSessionToken();
+
+    if (!token) {
+      throw new Error(
+        "Your session has expired. Please log in again."
+      );
+    }
+
+    return token;
+  };
+
+  const resetToEmptyCourse = () => {
+    setCourse({
+      ...EMPTY_COURSE,
+      subjects: [],
+    });
+    setNewSubject("");
+    setImageName("");
+  };
+
+  const normalizeCourse = (
+    rawCourse: Record<string, unknown>,
+    fallbackCourseId = ""
+  ): CourseData => {
+    const subjectsFromCourse = Array.isArray(rawCourse.subjects)
+      ? rawCourse.subjects
+          .map((subject) => String(subject ?? "").trim())
+          .filter(Boolean)
+      : [];
+
+    return {
+      course_id: String(
+        rawCourse.course_id ?? fallbackCourseId
+      ).trim(),
+
+      title: String(rawCourse.title ?? "").trim(),
+
+      duration: String(
+        rawCourse.duration ?? ""
+      ).trim(),
+
+      startDate: String(
+        rawCourse.startDate ??
+          rawCourse.start_date ??
+          ""
+      ).slice(0, 10),
+
+      boards: String(
+        rawCourse.boards ?? ""
+      ).trim(),
+
+      timing: String(
+        rawCourse.timing ?? ""
+      ).trim(),
+
+      subjects: subjectsFromCourse,
+
+      image: String(
+        rawCourse.image ??
+          rawCourse.image_url ??
+          ""
+      ).trim(),
+
+      image_file_id: String(
+        rawCourse.image_file_id ?? ""
+      ).trim(),
+
+      image_url: String(
+        rawCourse.image_url ??
+          rawCourse.image ??
+          ""
+      ).trim(),
+    };
+  };
+
+  const normalizeSubjects = (subjects: unknown[]) => {
+    return subjects
+      .map((subject) => {
+        if (typeof subject === "string") {
+          return subject.trim();
+        }
+
+        if (
+          subject &&
+          typeof subject === "object"
+        ) {
+          const item =
+            subject as Record<string, unknown>;
+
+          return String(
+            item.subject_name ??
+              item.subject ??
+              item.name ??
+              ""
+          ).trim();
+        }
+
+        return "";
+      })
+      .filter(Boolean);
+  };
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD ALL COURSES
+   * ---------------------------------------------------------
+   */
+
+  const loadCourses = async (
+    showMessage = true
+  ) => {
+    if (!API_URL) {
+      setSaveMessage(
+        "Apps Script URL is not configured."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      if (showMessage) {
+        setSaveMessage("Loading courses...");
+      }
+
+      const response = await fetch(
+        `${API_URL}?action=getCourses`,
+        {
+          method: "GET",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Request failed with status ${response.status}.`
+        );
+      }
+
+      const data = await response.json();
+
+      console.log(
+        "getCourses response:",
+        data
+      );
+
+      if (!data.success) {
+        throw new Error(
+          data.error ||
+            data.message ||
+            "Unable to load courses."
+        );
+      }
+
+      const courseList: CourseOption[] =
+        Array.isArray(data.courses)
+          ? data.courses
+              .map(
+                (
+                  item: Record<string, unknown>
+                ) => ({
+                  course_id: String(
+                    item.course_id ?? ""
+                  ).trim(),
+
+                  title:
+                    String(
+                      item.title ?? ""
+                    ).trim() ||
+                    "Untitled Course",
+                })
+              )
+              .filter(
+                (item: CourseOption) =>
+                  item.course_id !== ""
+              )
+          : [];
+
+      setCourses(courseList);
+
+      if (courseList.length === 0) {
+        setIsNewCourse(true);
+        setSelectedCourseId("");
+        resetToEmptyCourse();
+
+        if (showMessage) {
+          setSaveMessage(
+            "No courses found. Create your first course."
+          );
+        }
+      } else {
+        setIsNewCourse(false);
+
+        setSelectedCourseId(
+          (currentId) =>
+            currentId &&
+            courseList.some(
+              (item) =>
+                item.course_id === currentId
+            )
+              ? currentId
+              : courseList[0].course_id
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load courses:",
+        error
+      );
+
+      setSaveMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load courses from the server."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadCourses = async () => {
+    loadCourses();
+  }, []);
+
+  /*
+   * ---------------------------------------------------------
+   * LOAD SELECTED COURSE
+   * ---------------------------------------------------------
+   *
+   * getCourse is intentionally public in the current
+   * Apps Script backend, so no session token is required here.
+   */
+
+  useEffect(() => {
+    const loadSelectedCourse = async () => {
       if (!API_URL) {
-        console.error(
-          "VITE_APPS_SCRIPT_URL is not configured."
-        );
+        return;
+      }
 
-        setSaveMessage(
-          "Apps Script URL is not configured."
-        );
+      if (isNewCourse) {
+        resetToEmptyCourse();
+        setSaveMessage("");
+        return;
+      }
 
+      if (!selectedCourseId) {
         return;
       }
 
       try {
         setSaveMessage(
-          "Loading courses..."
+          "Loading selected course..."
         );
 
         const response = await fetch(
-          `${API_URL}?action=getCourses`
+          `${API_URL}?action=getCourse&course_id=${encodeURIComponent(
+            selectedCourseId
+          )}`,
+          {
+            method: "GET",
+          }
         );
 
         if (!response.ok) {
           throw new Error(
-            `Request failed with status ${response.status}`
+            `Request failed with status ${response.status}.`
           );
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
         console.log(
-          "getCourses response:",
+          "getCourse response:",
           data
         );
 
-        if (!data.success) {
+        if (!data.success || !data.course) {
           throw new Error(
             data.error ||
               data.message ||
-              "Unable to load courses."
+              "Course not found."
           );
         }
 
-        const courseList: CourseOption[] =
-          Array.isArray(data.courses)
-            ? data.courses
-                .map(
-                  (
-                    item: Record<
-                      string,
-                      unknown
-                    >
-                  ) => ({
-                    course_id:
-                      String(
-                        item.course_id ??
-                          ""
-                      ).trim(),
+        const normalizedCourse =
+          normalizeCourse(
+            data.course as Record<
+              string,
+              unknown
+            >,
+            selectedCourseId
+          );
 
-                    title:
-                      String(
-                        item.title ??
-                          ""
-                      ).trim() ||
-                      "Untitled Course",
-                  })
-                )
-                .filter(
-                  (
-                    item: CourseOption
-                  ) =>
-                    item.course_id !== ""
-                )
-            : [];
-
-        setCourses(courseList);
-
-        /*
-         * If courses already exist,
-         * automatically select the first one.
-         */
         if (
-          courseList.length > 0
+          Array.isArray(data.subjects)
         ) {
-          setIsNewCourse(false);
+          const backendSubjects =
+            normalizeSubjects(
+              data.subjects
+            );
 
-          setSelectedCourseId(
-            courseList[0].course_id
-          );
+          if (backendSubjects.length > 0) {
+            normalizedCourse.subjects =
+              backendSubjects;
+          }
         }
 
-        /*
-         * If there are no courses,
-         * open the form in New Course mode.
-         */
-        else {
-          setIsNewCourse(true);
+        setCourse(normalizedCourse);
+        setNewSubject("");
+        setImageName("");
 
-          setSelectedCourseId("");
-
-          setCourse({
-            ...DEFAULT_COURSE,
-            course_id: undefined,
-          });
-
-          setSaveMessage(
-            "No courses found. Create your first course."
-          );
-        }
+        setSaveMessage("");
       } catch (error) {
         console.error(
-          "Failed to load courses:",
+          "Failed to load selected course:",
           error
         );
 
         setSaveMessage(
-          "Unable to load courses from the server."
+          error instanceof Error
+            ? error.message
+            : "Unable to load the selected course."
         );
       }
     };
-
-    loadCourses();
-  }, []);
-
-  /*
-   * Load the selected course by its course_id.
-   */
-  useEffect(() => {
-    const loadSelectedCourse =
-      async () => {
-        if (!API_URL) {
-          return;
-        }
-
-        /*
-         * New course mode.
-         */
-        if (isNewCourse) {
-          setCourse({
-            ...DEFAULT_COURSE,
-            course_id: undefined,
-          });
-
-          setNewSubject("");
-
-          setImageName("");
-
-          return;
-        }
-
-        /*
-         * Nothing selected yet.
-         */
-        if (!selectedCourseId) {
-          return;
-        }
-
-        try {
-          setSaveMessage(
-            "Loading selected course..."
-          );
-
-          const response =
-            await fetch(
-              `${API_URL}?action=getCourse&course_id=${encodeURIComponent(
-                selectedCourseId
-              )}`
-            );
-
-          if (!response.ok) {
-            throw new Error(
-              `Request failed with status ${response.status}`
-            );
-          }
-
-          const data =
-            await response.json();
-
-          console.log(
-            "getCourse response:",
-            data
-          );
-
-          if (
-            !data.success ||
-            !data.course
-          ) {
-            throw new Error(
-              data.error ||
-                data.message ||
-                "Course not found."
-            );
-          }
-
-          const rawCourse =
-            data.course as Record<
-              string,
-              unknown
-            >;
-
-          /*
-           * Normalize Google Sheets /
-           * Apps Script data into the
-           * React form structure.
-           */
-          const normalizedCourse: CourseData =
-            {
-              course_id:
-                String(
-                  rawCourse.course_id ??
-                    selectedCourseId
-                ).trim(),
-
-              title:
-                String(
-                  rawCourse.title ??
-                    ""
-                ),
-
-              duration:
-                String(
-                  rawCourse.duration ??
-                    ""
-                ),
-
-              startDate:
-                String(
-                  rawCourse.startDate ??
-                    rawCourse.start_date ??
-                    ""
-                ).slice(0, 10),
-
-              boards:
-                String(
-                  rawCourse.boards ??
-                    ""
-                ),
-
-              timing:
-                String(
-                  rawCourse.timing ??
-                    ""
-                ),
-
-              subjects:
-                Array.isArray(
-                  rawCourse.subjects
-                )
-                  ? rawCourse.subjects.map(
-                      (
-                        subject
-                      ) =>
-                        String(
-                          subject
-                        )
-                    )
-                  : [],
-
-              image:
-                String(
-                  rawCourse.image ??
-                    rawCourse.image_url ??
-                    ""
-                ),
-
-              image_file_id:
-                String(
-                  rawCourse.image_file_id ??
-                    ""
-                ).trim(),
-
-              image_url:
-                String(
-                  rawCourse.image_url ??
-                    rawCourse.image ??
-                    ""
-                ),
-            };
-
-          /*
-           * CourseSubjects is returned
-           * separately by Apps Script.
-           *
-           * Accept common subject
-           * column names.
-           */
-          if (
-            Array.isArray(
-              data.subjects
-            ) &&
-            data.subjects.length > 0
-          ) {
-            const subjectValues =
-              data.subjects
-                .map(
-                  (
-                    subject: unknown
-                  ) => {
-                    if (
-                      typeof subject ===
-                      "string"
-                    ) {
-                      return subject;
-                    }
-
-                    if (
-                      subject &&
-                      typeof subject ===
-                        "object"
-                    ) {
-                      const item =
-                        subject as Record<
-                          string,
-                          unknown
-                        >;
-
-                      return String(
-                        item.subject_name ??
-                          item.subject ??
-                          item.name ??
-                          ""
-                      ).trim();
-                    }
-
-                    return "";
-                  }
-                )
-                .filter(
-                  (
-                    subject: string
-                  ) =>
-                    subject !== ""
-                );
-
-            if (
-              subjectValues.length >
-              0
-            ) {
-              normalizedCourse.subjects =
-                subjectValues;
-            }
-          }
-
-          setCourse({
-            ...DEFAULT_COURSE,
-            ...normalizedCourse,
-          });
-
-          setNewSubject("");
-
-          setImageName("");
-
-          setSaveMessage("");
-        } catch (error) {
-          console.error(
-            "Failed to load selected course:",
-            error
-          );
-
-          setSaveMessage(
-            "Unable to load the selected course."
-          );
-        }
-      };
 
     loadSelectedCourse();
   }, [
@@ -444,79 +392,51 @@ function ManageCourse() {
   ]);
 
   /*
-   * Handle course selector.
+   * ---------------------------------------------------------
+   * COURSE SELECTION
+   * ---------------------------------------------------------
    */
+
   const handleCourseSelection = (
     event: ChangeEvent<HTMLSelectElement>
   ) => {
-    const value =
-      event.target.value;
+    const value = event.target.value;
 
-    /*
-     * Create new course.
-     */
-    if (
-      value === "__NEW__"
-    ) {
+    if (value === "__NEW__") {
       setIsNewCourse(true);
-
       setSelectedCourseId("");
-
-      setCourse({
-        ...DEFAULT_COURSE,
-        course_id: undefined,
-      });
-
-      setNewSubject("");
-
-      setImageName("");
-
-      setSaveMessage("");
-
+      resetToEmptyCourse();
+      setSaveMessage(
+        "New course form is ready."
+      );
       return;
     }
 
-    /*
-     * Existing course.
-     */
     setIsNewCourse(false);
-
     setSelectedCourseId(value);
-
     setNewSubject("");
-
     setImageName("");
+    setSaveMessage("");
   };
 
-  /*
-   * Start a completely new course.
-   */
   const handleNewCourse = () => {
     setIsNewCourse(true);
-
     setSelectedCourseId("");
-
-    setCourse({
-      ...DEFAULT_COURSE,
-      course_id: undefined,
-    });
-
-    setNewSubject("");
-
-    setImageName("");
-
+    resetToEmptyCourse();
     setSaveMessage(
       "New course form is ready."
     );
   };
 
   /*
-   * Handle normal text/date inputs.
+   * ---------------------------------------------------------
+   * INPUT HANDLING
+   * ---------------------------------------------------------
    */
+
   const handleChange = (
     event: ChangeEvent<
-      HTMLInputElement |
-        HTMLTextAreaElement
+      HTMLInputElement | HTMLTextAreaElement
     >
   ) => {
     const {
@@ -524,35 +444,31 @@ function ManageCourse() {
       value,
     } = event.target;
 
-    setCourse(
-      (previousCourse) => ({
-        ...previousCourse,
-        [name]: value,
-      })
-    );
+    setCourse((previousCourse) => ({
+      ...previousCourse,
+      [name]: value,
+    }));
 
     setSaveMessage("");
   };
 
   /*
-   * Add a new subject.
+   * ---------------------------------------------------------
+   * SUBJECT HANDLING
+   * ---------------------------------------------------------
    */
+
   const handleAddSubject = () => {
-    const subject =
-      newSubject.trim();
+    const subject = newSubject.trim();
 
     if (!subject) {
       return;
     }
 
-    /*
-     * Prevent duplicate subjects.
-     */
     const alreadyExists =
       course.subjects.some(
         (existingSubject) =>
-          existingSubject
-            .toLowerCase() ===
+          existingSubject.toLowerCase() ===
           subject.toLowerCase()
       );
 
@@ -560,68 +476,75 @@ function ManageCourse() {
       setSaveMessage(
         "This subject has already been added."
       );
-
       return;
     }
 
-    setCourse(
-      (previousCourse) => ({
-        ...previousCourse,
-
-        subjects: [
-          ...previousCourse.subjects,
-          subject,
-        ],
-      })
-    );
+    setCourse((previousCourse) => ({
+      ...previousCourse,
+      subjects: [
+        ...previousCourse.subjects,
+        subject,
+      ],
+    }));
 
     setNewSubject("");
-
     setSaveMessage("");
   };
 
-  /*
-   * Allow Enter key to add a subject.
-   */
   const handleSubjectKeyDown = (
     event: KeyboardEvent<HTMLInputElement>
   ) => {
-    if (
-      event.key === "Enter"
-    ) {
+    if (event.key === "Enter") {
       event.preventDefault();
-
       handleAddSubject();
     }
   };
 
-  /*
-   * Remove a subject.
-   */
   const handleRemoveSubject = (
     indexToRemove: number
   ) => {
-    setCourse(
-      (previousCourse) => ({
-        ...previousCourse,
+    setCourse((previousCourse) => ({
+      ...previousCourse,
+      subjects:
+        previousCourse.subjects.filter(
+          (_, index) =>
+            index !== indexToRemove
+        ),
+    }));
 
-        subjects:
-          previousCourse.subjects.filter(
-            (_, index) =>
-              index !==
-              indexToRemove
-          ),
-      })
-    );
+    setSaveMessage("");
+  };
+
+  const handleSubjectChange = (
+    index: number,
+    value: string
+  ) => {
+    setCourse((previousCourse) => {
+      const subjects = [
+        ...previousCourse.subjects,
+      ];
+
+      subjects[index] = value;
+
+      return {
+        ...previousCourse,
+        subjects,
+      };
+    });
 
     setSaveMessage("");
   };
 
   /*
-   * Upload course image to Apps Script.
+   * ---------------------------------------------------------
+   * IMAGE UPLOAD
+   * ---------------------------------------------------------
    *
-   * Browser converts image to Base64.
+   * IMPORTANT:
+   * uploadCourseImage is a protected POST action.
+   * session_token MUST be included.
    */
+
   const handleImageChange = (
     event: ChangeEvent<HTMLInputElement>
   ) => {
@@ -632,32 +555,23 @@ function ManageCourse() {
       return;
     }
 
-    /*
-     * Validate image.
-     */
     if (
-      !file.type.startsWith(
-        "image/"
-      )
+      !file.type.startsWith("image/")
     ) {
       setSaveMessage(
         "Please select a valid image file."
       );
-
+      event.target.value = "";
       return;
     }
 
-    /*
-     * Maximum 5 MB.
-     */
     if (
-      file.size >
-      5 * 1024 * 1024
+      file.size > 5 * 1024 * 1024
     ) {
       setSaveMessage(
         "Please select an image smaller than 5 MB."
       );
-
+      event.target.value = "";
       return;
     }
 
@@ -665,163 +579,166 @@ function ManageCourse() {
       setSaveMessage(
         "Apps Script URL is not configured."
       );
-
       return;
     }
 
+    setIsUploading(true);
     setSaveMessage(
       "Uploading image..."
     );
 
-    const reader =
-      new FileReader();
+    const reader = new FileReader();
 
-    reader.onload =
-      async () => {
-        try {
-          const result =
-            reader.result;
+    reader.onload = async () => {
+      try {
+        const result =
+          reader.result;
 
-          if (
-            typeof result !==
-            "string"
-          ) {
-            throw new Error(
-              "Unable to read image."
-            );
-          }
-
-          const parts =
-            result.split(",");
-
-          if (
-            parts.length < 2
-          ) {
-            throw new Error(
-              "Invalid image data."
-            );
-          }
-
-          const base64 =
-            parts[1];
-
-          const response =
-            await fetch(
-              API_URL,
-              {
-                method:
-                  "POST",
-
-                body:
-                  JSON.stringify(
-                    {
-                      action:
-                        "uploadCourseImage",
-
-                      fileName:
-                        file.name,
-
-                      mimeType:
-                        file.type,
-
-                      base64,
-                    }
-                  ),
-              }
-            );
-
-          if (!response.ok) {
-            throw new Error(
-              `Upload failed with status ${response.status}`
-            );
-          }
-
-          const data =
-            await response.json();
-
-          console.log(
-            "uploadCourseImage response:",
-            data
-          );
-
-          if (!data.success) {
-            throw new Error(
-              data.message ||
-                data.error ||
-                "Image upload failed."
-            );
-          }
-
-          /*
-           * Apps Script returns file_url.
-           *
-           * image_url is also accepted
-           * for backward compatibility.
-           */
-          const uploadedImageUrl =
-            String(
-              data.image_url ||
-                data.file_url ||
-                ""
-            ).trim();
-
-          const uploadedFileId =
-            String(
-              data.file_id ||
-                ""
-            ).trim();
-
-          setCourse(
-            (previousCourse) => ({
-              ...previousCourse,
-
-              image: uploadedImageUrl,
-              image_url: uploadedImageUrl,
-              image_file_id: uploadedFileId,
-            })
-          );
-
-          setImageName(
-            file.name
-          );
-
-          setSaveMessage(
-            "Image uploaded successfully."
-          );
-        } catch (error) {
-          console.error(
-            "Failed to upload course image:",
-            error
-          );
-
-          setSaveMessage(
-            error instanceof Error
-              ? error.message
-              : "Unable to upload the course image."
+        if (
+          typeof result !== "string"
+        ) {
+          throw new Error(
+            "Unable to read image."
           );
         }
-      };
+
+        const parts =
+          result.split(",");
+
+        if (parts.length < 2) {
+          throw new Error(
+            "Invalid image data."
+          );
+        }
+
+        const base64 = parts[1];
+
+        const sessionToken =
+          requireSessionToken();
+
+        const response =
+          await fetch(API_URL, {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8",
+            },
+
+            body: JSON.stringify({
+              action:
+                "uploadCourseImage",
+
+              session_token:
+                sessionToken,
+
+              fileName:
+                file.name,
+
+              mimeType:
+                file.type,
+
+              base64,
+            }),
+          });
+
+        if (!response.ok) {
+          throw new Error(
+            `Upload failed with status ${response.status}.`
+          );
+        }
+
+        const data =
+          await response.json();
+
+        console.log(
+          "uploadCourseImage response:",
+          data
+        );
+
+        if (!data.success) {
+          throw new Error(
+            data.error ||
+              data.message ||
+              "Image upload failed."
+          );
+        }
+
+        const uploadedImageUrl =
+          String(
+            data.image_url ||
+              data.file_url ||
+              ""
+          ).trim();
+
+        const uploadedFileId =
+          String(
+            data.file_id || ""
+          ).trim();
+
+        if (!uploadedImageUrl) {
+          throw new Error(
+            "Image uploaded but no image URL was returned."
+          );
+        }
+
+        setCourse(
+          (previousCourse) => ({
+            ...previousCourse,
+
+            image:
+              uploadedImageUrl,
+
+            image_url:
+              uploadedImageUrl,
+
+            image_file_id:
+              uploadedFileId,
+          })
+        );
+
+        setImageName(
+          file.name
+        );
+
+        setSaveMessage(
+          "Image uploaded successfully."
+        );
+      } catch (error) {
+        console.error(
+          "Failed to upload course image:",
+          error
+        );
+
+        setSaveMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to upload the course image."
+        );
+      } finally {
+        setIsUploading(false);
+        event.target.value = "";
+      }
+    };
 
     reader.onerror = () => {
+      setIsUploading(false);
+
       setSaveMessage(
         "Unable to read the selected image."
       );
+
+      event.target.value = "";
     };
 
     reader.readAsDataURL(file);
   };
 
-  /*
-   * Remove currently selected image
-   * from form state.
-   *
-   * This does NOT delete the
-   * Google Drive file.
-   */
   const handleRemoveImage = () => {
     setCourse(
       (previousCourse) => ({
         ...previousCourse,
+
         image: "",
         image_url: "",
         image_file_id: "",
@@ -829,30 +746,24 @@ function ManageCourse() {
     );
 
     setImageName("");
-
     setSaveMessage("");
   };
 
   /*
-   * Save course information.
+   * ---------------------------------------------------------
+   * SAVE COURSE
+   * ---------------------------------------------------------
    *
-   * EXISTING COURSE:
-   * course_id is sent.
-   *
-   * NEW COURSE:
-   * course_id is deliberately omitted.
-   *
-   * Apps Script then generates a new
-   * course ID and appends a new row.
+   * IMPORTANT:
+   * saveCourse is a protected POST action.
+   * session_token MUST be included.
    */
+
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
-    /*
-     * Validation
-     */
     if (
       String(
         course.title ?? ""
@@ -861,7 +772,6 @@ function ManageCourse() {
       setSaveMessage(
         "Please enter a course title."
       );
-
       return;
     }
 
@@ -873,23 +783,17 @@ function ManageCourse() {
       setSaveMessage(
         "Please enter the course duration."
       );
-
       return;
     }
 
     if (
-      course.startDate ===
-        null ||
-      course.startDate ===
-        undefined ||
       String(
-        course.startDate
+        course.startDate ?? ""
       ).trim() === ""
     ) {
       setSaveMessage(
         "Please select the course start date."
       );
-
       return;
     }
 
@@ -901,7 +805,6 @@ function ManageCourse() {
       setSaveMessage(
         "Please enter the applicable boards."
       );
-
       return;
     }
 
@@ -913,21 +816,22 @@ function ManageCourse() {
       setSaveMessage(
         "Please enter the class timing."
       );
-
       return;
     }
 
+    const cleanedSubjects =
+      course.subjects
+        .map((subject) =>
+          String(subject).trim()
+        )
+        .filter(Boolean);
+
     if (
-      !Array.isArray(
-        course.subjects
-      ) ||
-      course.subjects.length ===
-        0
+      cleanedSubjects.length === 0
     ) {
       setSaveMessage(
         "Please add at least one subject."
       );
-
       return;
     }
 
@@ -935,9 +839,10 @@ function ManageCourse() {
       setSaveMessage(
         "Apps Script URL is not configured."
       );
-
       return;
     }
+
+    setIsSaving(true);
 
     try {
       setSaveMessage(
@@ -947,60 +852,58 @@ function ManageCourse() {
       );
 
       /*
-       * Normalize data before sending.
+       * Get the CURRENT authentication token
+       * immediately before the protected request.
        */
-      const courseToSave: CourseData =
-        {
-          ...course,
+      const sessionToken =
+        requireSessionToken();
 
-          title: String(
-            course.title ?? ""
-          ).trim(),
+      const courseToSave: CourseData = {
+        ...course,
 
-          duration: String(
-            course.duration ?? ""
-          ).trim(),
+        title: String(
+          course.title ?? ""
+        ).trim(),
 
-          startDate: String(
-            course.startDate ?? ""
-          ),
+        duration: String(
+          course.duration ?? ""
+        ).trim(),
 
-          boards: String(
-            course.boards ?? ""
-          ).trim(),
+        startDate: String(
+          course.startDate ?? ""
+        ).slice(0, 10),
 
-          timing: String(
-            course.timing ?? ""
-          ).trim(),
+        boards: String(
+          course.boards ?? ""
+        ).trim(),
 
-          subjects:
-            course.subjects.map(
-              (subject) =>
-                String(
-                  subject
-                ).trim()
-            ),
+        timing: String(
+          course.timing ?? ""
+        ).trim(),
 
-          image: String(
-            course.image ?? ""
-          ),
+        subjects:
+          cleanedSubjects,
 
-          image_url: String(
-            course.image_url ??
-              course.image ??
-              ""
-          ),
+        image: String(
+          course.image ?? ""
+        ).trim(),
 
-          image_file_id: String(
-            course.image_file_id ??
-              ""
-          ),
-        };
+        image_url: String(
+          course.image_url ??
+            course.image ??
+            ""
+        ).trim(),
+
+        image_file_id: String(
+          course.image_file_id ?? ""
+        ).trim(),
+      };
 
       /*
        * NEW COURSE
        *
-       * Do NOT send the old course ID.
+       * Do not send the old course ID.
+       * Apps Script will generate one.
        */
       if (isNewCourse) {
         delete courseToSave.course_id;
@@ -1009,11 +912,9 @@ function ManageCourse() {
       /*
        * EXISTING COURSE
        *
-       * Force the selected ID.
+       * Force the currently selected ID.
        */
-      else if (
-        selectedCourseId
-      ) {
+      else if (selectedCourseId) {
         courseToSave.course_id =
           selectedCourseId;
       }
@@ -1024,28 +925,29 @@ function ManageCourse() {
       );
 
       const response =
-        await fetch(
-          API_URL,
-          {
-            method:
-              "POST",
+        await fetch(API_URL, {
+          method: "POST",
 
-            body:
-              JSON.stringify(
-                {
-                  action:
-                    "saveCourse",
+          headers: {
+            "Content-Type":
+              "text/plain;charset=utf-8",
+          },
 
-                  course:
-                    courseToSave,
-                }
-              ),
-          }
-        );
+          body: JSON.stringify({
+            action:
+              "saveCourse",
+
+            session_token:
+              sessionToken,
+
+            course:
+              courseToSave,
+          }),
+        });
 
       if (!response.ok) {
         throw new Error(
-          `Request failed with status ${response.status}`
+          `Request failed with status ${response.status}.`
         );
       }
 
@@ -1065,112 +967,41 @@ function ManageCourse() {
         );
       }
 
-      /*
-       * Apps Script MUST return course_id.
-       */
       const savedCourseId =
         String(
-          data.course_id ??
-            ""
+          data.course_id ?? ""
         ).trim();
 
-      if (
-        !savedCourseId
-      ) {
+      if (!savedCourseId) {
         throw new Error(
           "Server saved the course but did not return a course ID."
         );
       }
 
-      /*
-       * Determine whether a new row
-       * was created.
-       */
       const wasCreated =
-        data.action ===
-          "created" ||
+        data.action === "created" ||
         isNewCourse;
 
       /*
-       * Store the resulting ID locally.
+       * Keep the returned ID in local state.
        */
       setCourse(
         (previousCourse) => ({
           ...previousCourse,
-
           course_id:
             savedCourseId,
         })
       );
 
       /*
-       * If a new course was created,
-       * refresh the course list.
+       * If this was a new course,
+       * refresh the selector and select
+       * the newly created course.
        */
       if (wasCreated) {
-        const coursesResponse =
-          await fetch(
-            `${API_URL}?action=getCourses`
-          );
+        await loadCourses(false);
 
-        if (
-          coursesResponse.ok
-        ) {
-          const coursesData =
-            await coursesResponse.json();
-
-          if (
-            coursesData.success &&
-            Array.isArray(
-              coursesData.courses
-            )
-          ) {
-            const refreshedCourses:
-              CourseOption[] =
-              coursesData.courses
-                .map(
-                  (
-                    item: Record<
-                      string,
-                      unknown
-                    >
-                  ) => ({
-                    course_id:
-                      String(
-                        item.course_id ??
-                          ""
-                      ).trim(),
-
-                    title:
-                      String(
-                        item.title ??
-                          ""
-                      ).trim() ||
-                      "Untitled Course",
-                  })
-                )
-                .filter(
-                  (
-                    item: CourseOption
-                  ) =>
-                    item.course_id !==
-                    ""
-                );
-
-            setCourses(
-              refreshedCourses
-            );
-          }
-        }
-
-        /*
-         * Switch from New Course
-         * to Edit Course mode.
-         */
-        setIsNewCourse(
-          false
-        );
-
+        setIsNewCourse(false);
         setSelectedCourseId(
           savedCourseId
         );
@@ -1192,286 +1023,145 @@ function ManageCourse() {
           ? error.message
           : "Unable to save course information."
       );
+    } finally {
+      setIsSaving(false);
     }
   };
 
   /*
-   * Reset the current form.
-   *
-   * Existing course:
-   * reload it from backend.
-   *
-   * New course:
-   * restore default form.
+   * ---------------------------------------------------------
+   * RESET
+   * ---------------------------------------------------------
    */
-  const handleReset =
-    async () => {
-      const confirmed =
-        window.confirm(
-          "Are you sure you want to reset the course information?"
+
+  const handleReset = async () => {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to reset the course information?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (isNewCourse) {
+      resetToEmptyCourse();
+
+      setSaveMessage(
+        "New course form has been reset."
+      );
+
+      return;
+    }
+
+    if (
+      !API_URL ||
+      !selectedCourseId
+    ) {
+      return;
+    }
+
+    try {
+      setSaveMessage(
+        "Reloading course..."
+      );
+
+      const response =
+        await fetch(
+          `${API_URL}?action=getCourse&course_id=${encodeURIComponent(
+            selectedCourseId
+          )}`
         );
 
-      if (!confirmed) {
-        return;
-      }
-
-      /*
-       * New course reset.
-       */
-      if (isNewCourse) {
-        setCourse({
-          ...DEFAULT_COURSE,
-          course_id:
-            undefined,
-        });
-
-        setNewSubject("");
-
-        setImageName("");
-
-        setSaveMessage(
-          "New course form has been reset."
+      if (!response.ok) {
+        throw new Error(
+          `Request failed with status ${response.status}.`
         );
-
-        return;
       }
 
-      /*
-       * Existing course reset.
-       */
+      const data =
+        await response.json();
+
       if (
-        !API_URL ||
-        !selectedCourseId
+        !data.success ||
+        !data.course
       ) {
-        return;
+        throw new Error(
+          data.error ||
+            data.message ||
+            "Unable to reload course."
+        );
       }
 
-      try {
-        setSaveMessage(
-          "Reloading course..."
-        );
-
-        const response =
-          await fetch(
-            `${API_URL}?action=getCourse&course_id=${encodeURIComponent(
-              selectedCourseId
-            )}`
-          );
-
-        if (!response.ok) {
-          throw new Error(
-            `Request failed with status ${response.status}`
-          );
-        }
-
-        const data =
-          await response.json();
-
-        if (
-          !data.success ||
-          !data.course
-        ) {
-          throw new Error(
-            data.error ||
-              data.message ||
-              "Unable to reload course."
-          );
-        }
-
-        const rawCourse =
+      const normalizedCourse =
+        normalizeCourse(
           data.course as Record<
             string,
             unknown
-          >;
+          >,
+          selectedCourseId
+        );
 
-        const normalizedCourse:
-          CourseData =
-          {
-            course_id:
-              String(
-                rawCourse.course_id ??
-                  selectedCourseId
-              ).trim(),
-
-            title:
-              String(
-                rawCourse.title ??
-                  ""
-              ),
-
-            duration:
-              String(
-                rawCourse.duration ??
-                  ""
-              ),
-
-            startDate:
-              String(
-                rawCourse.startDate ??
-                  rawCourse.start_date ??
-                  ""
-              ).slice(0, 10),
-
-            boards:
-              String(
-                rawCourse.boards ??
-                  ""
-              ),
-
-            timing:
-              String(
-                rawCourse.timing ??
-                  ""
-              ),
-
-            subjects:
-              Array.isArray(
-                rawCourse.subjects
-              )
-                ? rawCourse.subjects.map(
-                    (
-                      subject
-                    ) =>
-                      String(
-                        subject
-                      )
-                  )
-                : [],
-
-            image:
-              String(
-                rawCourse.image ??
-                  rawCourse.image_url ??
-                  ""
-              ),
-
-            image_file_id:
-              String(
-                rawCourse.image_file_id ??
-                  ""
-              ).trim(),
-
-            image_url:
-              String(
-                rawCourse.image_url ??
-                  rawCourse.image ??
-                  ""
-              ),
-          };
-
-        /*
-         * Load subjects returned
-         * separately by backend.
-         */
-        if (
-          Array.isArray(
+      if (
+        Array.isArray(data.subjects)
+      ) {
+        const subjects =
+          normalizeSubjects(
             data.subjects
-          ) &&
-          data.subjects.length >
-            0
-        ) {
-          const subjectValues =
-            data.subjects
-              .map(
-                (
-                  subject: unknown
-                ) => {
-                  if (
-                    typeof subject ===
-                    "string"
-                  ) {
-                    return subject;
-                  }
+          );
 
-                  if (
-                    subject &&
-                    typeof subject ===
-                      "object"
-                  ) {
-                    const item =
-                      subject as Record<
-                        string,
-                        unknown
-                      >;
-
-                    return String(
-                      item.subject_name ??
-                        item.subject ??
-                        item.name ??
-                        ""
-                    ).trim();
-                  }
-
-                  return "";
-                }
-              )
-              .filter(
-                (
-                  subject: string
-                ) =>
-                  subject !== ""
-              );
-
-          if (
-            subjectValues.length >
-            0
-          ) {
-            normalizedCourse.subjects =
-              subjectValues;
-          }
+        if (subjects.length > 0) {
+          normalizedCourse.subjects =
+            subjects;
         }
-
-        setCourse({
-          ...DEFAULT_COURSE,
-          ...normalizedCourse,
-        });
-
-        setNewSubject("");
-
-        setImageName("");
-
-        setSaveMessage(
-          "Course information has been reset."
-        );
-      } catch (error) {
-        console.error(
-          "Failed to reset course:",
-          error
-        );
-
-        setSaveMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to reset course."
-        );
       }
-    };
+
+      setCourse(
+        normalizedCourse
+      );
+
+      setNewSubject("");
+      setImageName("");
+
+      setSaveMessage(
+        "Course information has been reset."
+      );
+    } catch (error) {
+      console.error(
+        "Failed to reset course:",
+        error
+      );
+
+      setSaveMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to reset course."
+      );
+    }
+  };
 
   /*
-   * Convert YYYY-MM-DD into
-   * human-readable date.
+   * ---------------------------------------------------------
+   * DATE FORMATTER
+   * ---------------------------------------------------------
    */
+
   const formatDate = (
-    dateString:
-      | string
-      | number
+    dateString: string | number
   ) => {
     if (
-      dateString ===
-        null ||
-      dateString ===
-        undefined ||
-      String(
-        dateString
-      ).trim() === ""
+      dateString === null ||
+      dateString === undefined ||
+      String(dateString).trim() === ""
     ) {
       return "";
     }
 
     const normalizedDate =
-      String(
-        dateString
-      ).slice(0, 10);
+      String(dateString).slice(
+        0,
+        10
+      );
 
     const date =
       new Date(
@@ -1498,6 +1188,12 @@ function ManageCourse() {
     );
   };
 
+  /*
+   * ---------------------------------------------------------
+   * RENDER
+   * ---------------------------------------------------------
+   */
+
   return (
     <div
       style={{
@@ -1512,7 +1208,6 @@ function ManageCourse() {
           margin: "0 auto",
         }}
       >
-        {/* Page Header */}
         <div
           style={{
             marginBottom: "28px",
@@ -1538,9 +1233,8 @@ function ManageCourse() {
             }}
           >
             Enter and manage the course
-            information displayed on
-            the coaching institute
-            website.
+            information displayed on the
+            coaching institute website.
           </p>
         </div>
 
@@ -1562,16 +1256,14 @@ function ManageCourse() {
               display: "flex",
               justifyContent:
                 "space-between",
-              alignItems:
-                "flex-end",
+              alignItems: "flex-end",
               gap: "15px",
               flexWrap: "wrap",
             }}
           >
             <div
               style={{
-                flex:
-                  "1 1 320px",
+                flex: "1 1 320px",
               }}
             >
               <label
@@ -1591,40 +1283,29 @@ function ManageCourse() {
                 onChange={
                   handleCourseSelection
                 }
-                style={
-                  inputStyle
-                }
+                style={inputStyle}
+                disabled={isLoading}
               >
-                {courses.length ===
-                  0 && (
+                {courses.length === 0 && (
                   <option value="">
-                    No existing
-                    courses
+                    No existing courses
                   </option>
                 )}
 
-                {courses.map(
-                  (item) => (
-                    <option
-                      key={
-                        item.course_id
-                      }
-                      value={
-                        item.course_id
-                      }
-                    >
-                      {item.title}{" "}
-                      —{" "}
-                      {
-                        item.course_id
-                      }
-                    </option>
-                  )
-                )}
+                {courses.map((item) => (
+                  <option
+                    key={item.course_id}
+                    value={
+                      item.course_id
+                    }
+                  >
+                    {item.title} —{" "}
+                    {item.course_id}
+                  </option>
+                ))}
 
                 <option value="__NEW__">
-                  + Create New
-                  Course
+                  + Create New Course
                 </option>
               </select>
             </div>
@@ -1636,6 +1317,10 @@ function ManageCourse() {
               }
               style={
                 secondaryButtonStyle
+              }
+              disabled={
+                isSaving ||
+                isUploading
               }
             >
               + New Course
@@ -1660,18 +1345,14 @@ function ManageCourse() {
 
         {/* Main Form */}
         <form
-          onSubmit={
-            handleSubmit
-          }
+          onSubmit={handleSubmit}
         >
           <div
             style={{
-              background:
-                "#ffffff",
+              background: "#ffffff",
               border:
                 "1px solid #e5e7eb",
-              borderRadius:
-                "16px",
+              borderRadius: "16px",
               padding: "28px",
               boxShadow:
                 "0 4px 16px rgba(0, 0, 0, 0.04)",
@@ -1680,30 +1361,22 @@ function ManageCourse() {
             {/* Course ID */}
             <div
               style={{
-                marginBottom:
-                  "22px",
-                padding:
-                  "12px 14px",
-                borderRadius:
-                  "9px",
-                background:
-                  isNewCourse
-                    ? "#fffbeb"
-                    : "#f9fafb",
-                border:
-                  isNewCourse
-                    ? "1px solid #fde68a"
-                    : "1px solid #e5e7eb",
+                marginBottom: "22px",
+                padding: "12px 14px",
+                borderRadius: "9px",
+                background: isNewCourse
+                  ? "#fffbeb"
+                  : "#f9fafb",
+                border: isNewCourse
+                  ? "1px solid #fde68a"
+                  : "1px solid #e5e7eb",
               }}
             >
               <div
                 style={{
-                  fontSize:
-                    "12px",
-                  color:
-                    "#6b7280",
-                  marginBottom:
-                    "4px",
+                  fontSize: "12px",
+                  color: "#6b7280",
+                  marginBottom: "4px",
                 }}
               >
                 Course ID
@@ -1711,10 +1384,8 @@ function ManageCourse() {
 
               <strong
                 style={{
-                  color:
-                    "#111827",
-                  fontSize:
-                    "14px",
+                  color: "#111827",
+                  fontSize: "14px",
                 }}
               >
                 {course.course_id ||
@@ -1725,15 +1396,12 @@ function ManageCourse() {
             {/* Course Title */}
             <div
               style={{
-                marginBottom:
-                  "22px",
+                marginBottom: "22px",
               }}
             >
               <label
                 htmlFor="course-title"
-                style={
-                  labelStyle
-                }
+                style={labelStyle}
               >
                 Course Title
               </label>
@@ -1742,16 +1410,10 @@ function ManageCourse() {
                 id="course-title"
                 name="title"
                 type="text"
-                value={
-                  course.title
-                }
-                onChange={
-                  handleChange
-                }
+                value={course.title}
+                onChange={handleChange}
                 placeholder="Enter course title"
-                style={
-                  inputStyle
-                }
+                style={inputStyle}
               />
             </div>
 
@@ -1762,16 +1424,13 @@ function ManageCourse() {
                 gridTemplateColumns:
                   "repeat(auto-fit, minmax(250px, 1fr))",
                 gap: "20px",
-                marginBottom:
-                  "22px",
+                marginBottom: "22px",
               }}
             >
               <div>
                 <label
                   htmlFor="course-duration"
-                  style={
-                    labelStyle
-                  }
+                  style={labelStyle}
                 >
                   Duration
                 </label>
@@ -1781,25 +1440,18 @@ function ManageCourse() {
                   name="duration"
                   type="text"
                   value={String(
-                    course.duration ??
-                      ""
+                    course.duration ?? ""
                   )}
-                  onChange={
-                    handleChange
-                  }
+                  onChange={handleChange}
                   placeholder="Example: 5 Months"
-                  style={
-                    inputStyle
-                  }
+                  style={inputStyle}
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="course-start-date"
-                  style={
-                    labelStyle
-                  }
+                  style={labelStyle}
                 >
                   Start Date
                 </label>
@@ -1809,15 +1461,10 @@ function ManageCourse() {
                   name="startDate"
                   type="date"
                   value={String(
-                    course.startDate ??
-                      ""
+                    course.startDate ?? ""
                   ).slice(0, 10)}
-                  onChange={
-                    handleChange
-                  }
-                  style={
-                    inputStyle
-                  }
+                  onChange={handleChange}
+                  style={inputStyle}
                 />
 
                 {course.startDate && (
@@ -1825,10 +1472,8 @@ function ManageCourse() {
                     style={{
                       margin:
                         "7px 0 0",
-                      fontSize:
-                        "13px",
-                      color:
-                        "#6b7280",
+                      fontSize: "13px",
+                      color: "#6b7280",
                     }}
                   >
                     {formatDate(
@@ -1846,16 +1491,13 @@ function ManageCourse() {
                 gridTemplateColumns:
                   "repeat(auto-fit, minmax(250px, 1fr))",
                 gap: "20px",
-                marginBottom:
-                  "28px",
+                marginBottom: "28px",
               }}
             >
               <div>
                 <label
                   htmlFor="course-boards"
-                  style={
-                    labelStyle
-                  }
+                  style={labelStyle}
                 >
                   Boards
                 </label>
@@ -1864,25 +1506,17 @@ function ManageCourse() {
                   id="course-boards"
                   name="boards"
                   type="text"
-                  value={
-                    course.boards
-                  }
-                  onChange={
-                    handleChange
-                  }
+                  value={course.boards}
+                  onChange={handleChange}
                   placeholder="Example: CBSE & COHSEM"
-                  style={
-                    inputStyle
-                  }
+                  style={inputStyle}
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="course-timing"
-                  style={
-                    labelStyle
-                  }
+                  style={labelStyle}
                 >
                   Class Timing
                 </label>
@@ -1891,16 +1525,10 @@ function ManageCourse() {
                   id="course-timing"
                   name="timing"
                   type="text"
-                  value={
-                    course.timing
-                  }
-                  onChange={
-                    handleChange
-                  }
+                  value={course.timing}
+                  onChange={handleChange}
                   placeholder="Example: 4:30 PM – 7:15 PM"
-                  style={
-                    inputStyle
-                  }
+                  style={inputStyle}
                 />
               </div>
             </div>
@@ -1910,78 +1538,53 @@ function ManageCourse() {
               style={{
                 borderTop:
                   "1px solid #e5e7eb",
-                paddingTop:
-                  "26px",
-                marginBottom:
-                  "28px",
+                paddingTop: "26px",
+                marginBottom: "28px",
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  alignItems:
-                    "center",
-                  gap: "15px",
-                  marginBottom:
-                    "14px",
+                  marginBottom: "14px",
                 }}
               >
-                <div>
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontSize:
-                        "19px",
-                      fontWeight:
-                        700,
-                      color:
-                        "#111827",
-                    }}
-                  >
-                    Subjects
-                  </h2>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: "19px",
+                    fontWeight: 700,
+                    color: "#111827",
+                  }}
+                >
+                  Subjects
+                </h2>
 
-                  <p
-                    style={{
-                      margin:
-                        "5px 0 0",
-                      color:
-                        "#6b7280",
-                      fontSize:
-                        "13px",
-                    }}
-                  >
-                    Add or remove
-                    subjects for
-                    this course.
-                  </p>
-                </div>
+                <p
+                  style={{
+                    margin:
+                      "5px 0 0",
+                    color: "#6b7280",
+                    fontSize: "13px",
+                  }}
+                >
+                  Add or remove subjects
+                  for this course.
+                </p>
               </div>
 
-              {/* Existing Subjects */}
               <div
                 style={{
-                  display:
-                    "flex",
-                  flexDirection:
-                    "column",
+                  display: "flex",
+                  flexDirection: "column",
                   gap: "10px",
-                  marginBottom:
-                    "15px",
+                  marginBottom: "15px",
                 }}
               >
                 {course.subjects.map(
-                  (
-                    subject,
-                    index
-                  ) => (
+                  (subject, index) => (
                     <div
                       key={`${subject}-${index}`}
                       style={{
-                        display:
-                          "flex",
+                        display: "flex",
                         alignItems:
                           "center",
                         gap: "12px",
@@ -1989,33 +1592,24 @@ function ManageCourse() {
                     >
                       <div
                         style={{
-                          width:
-                            "36px",
-                          height:
-                            "36px",
-                          borderRadius:
-                            "8px",
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "8px",
                           background:
                             "#f3f4f6",
-                          display:
-                            "flex",
+                          display: "flex",
                           alignItems:
                             "center",
                           justifyContent:
                             "center",
-                          fontSize:
-                            "13px",
-                          fontWeight:
-                            700,
-                          color:
-                            "#6b7280",
-                          flexShrink:
-                            0,
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          color: "#6b7280",
+                          flexShrink: 0,
                         }}
                       >
                         {String(
-                          index +
-                            1
+                          index + 1
                         ).padStart(
                           2,
                           "0"
@@ -2024,36 +1618,13 @@ function ManageCourse() {
 
                       <input
                         type="text"
-                        value={
-                          subject
+                        value={subject}
+                        onChange={(event) =>
+                          handleSubjectChange(
+                            index,
+                            event.target.value
+                          )
                         }
-                        onChange={(
-                          event
-                        ) => {
-                          const updatedSubjects =
-                            [
-                              ...course.subjects,
-                            ];
-
-                          updatedSubjects[
-                            index
-                          ] =
-                            event.target.value;
-
-                          setCourse(
-                            (
-                              previousCourse
-                            ) => ({
-                              ...previousCourse,
-                              subjects:
-                                updatedSubjects,
-                            })
-                          );
-
-                          setSaveMessage(
-                            ""
-                          );
-                        }}
                         style={{
                           ...inputStyle,
                           flex: 1,
@@ -2071,6 +1642,10 @@ function ManageCourse() {
                         style={
                           deleteButtonStyle
                         }
+                        disabled={
+                          isSaving ||
+                          isUploading
+                        }
                       >
                         🗑
                       </button>
@@ -2079,27 +1654,19 @@ function ManageCourse() {
                 )}
               </div>
 
-              {/* Add Subject */}
               <div
                 style={{
-                  display:
-                    "flex",
+                  display: "flex",
                   gap: "10px",
-                  flexWrap:
-                    "wrap",
+                  flexWrap: "wrap",
                 }}
               >
                 <input
                   type="text"
-                  value={
-                    newSubject
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  value={newSubject}
+                  onChange={(event) =>
                     setNewSubject(
-                      event.target
-                        .value
+                      event.target.value
                     )
                   }
                   onKeyDown={
@@ -2121,6 +1688,10 @@ function ManageCourse() {
                   style={
                     secondaryButtonStyle
                   }
+                  disabled={
+                    isSaving ||
+                    isUploading
+                  }
                 >
                   + Add Subject
                 </button>
@@ -2132,21 +1703,16 @@ function ManageCourse() {
               style={{
                 borderTop:
                   "1px solid #e5e7eb",
-                paddingTop:
-                  "26px",
-                marginBottom:
-                  "28px",
+                paddingTop: "26px",
+                marginBottom: "28px",
               }}
             >
               <h2
                 style={{
                   margin: 0,
-                  fontSize:
-                    "19px",
-                  fontWeight:
-                    700,
-                  color:
-                    "#111827",
+                  fontSize: "19px",
+                  fontWeight: 700,
+                  color: "#111827",
                 }}
               >
                 Course Image
@@ -2156,15 +1722,12 @@ function ManageCourse() {
                 style={{
                   margin:
                     "5px 0 16px",
-                  color:
-                    "#6b7280",
-                  fontSize:
-                    "13px",
+                  color: "#6b7280",
+                  fontSize: "13px",
                 }}
               >
-                Select an image
-                to represent
-                this course.
+                Select an image to
+                represent this course.
               </p>
 
               {course.image ? (
@@ -2172,14 +1735,11 @@ function ManageCourse() {
                   style={{
                     position:
                       "relative",
-                    width:
-                      "100%",
-                    maxWidth:
-                      "500px",
+                    width: "100%",
+                    maxWidth: "500px",
                     borderRadius:
                       "12px",
-                    overflow:
-                      "hidden",
+                    overflow: "hidden",
                     border:
                       "1px solid #e5e7eb",
                     background:
@@ -2187,28 +1747,20 @@ function ManageCourse() {
                   }}
                 >
                   <img
-                    src={
-                      course.image
-                    }
+                    src={course.image}
                     alt="Course preview"
                     style={{
-                      width:
-                        "100%",
-                      height:
-                        "260px",
-                      objectFit:
-                        "cover",
-                      display:
-                        "block",
+                      width: "100%",
+                      height: "260px",
+                      objectFit: "cover",
+                      display: "block",
                     }}
                   />
 
                   <div
                     style={{
-                      padding:
-                        "12px",
-                      display:
-                        "flex",
+                      padding: "12px",
+                      display: "flex",
                       alignItems:
                         "center",
                       justifyContent:
@@ -2242,6 +1794,10 @@ function ManageCourse() {
                       style={
                         smallDeleteButtonStyle
                       }
+                      disabled={
+                        isSaving ||
+                        isUploading
+                      }
                     >
                       Remove
                     </button>
@@ -2251,18 +1807,14 @@ function ManageCourse() {
                 <label
                   htmlFor="course-image"
                   style={{
-                    width:
-                      "100%",
-                    maxWidth:
-                      "500px",
-                    minHeight:
-                      "180px",
+                    width: "100%",
+                    maxWidth: "500px",
+                    minHeight: "180px",
                     border:
                       "2px dashed #d1d5db",
                     borderRadius:
                       "12px",
-                    display:
-                      "flex",
+                    display: "flex",
                     flexDirection:
                       "column",
                     alignItems:
@@ -2270,52 +1822,54 @@ function ManageCourse() {
                     justifyContent:
                       "center",
                     cursor:
-                      "pointer",
+                      isUploading
+                        ? "not-allowed"
+                        : "pointer",
                     background:
                       "#fafafa",
-                    textAlign:
-                      "center",
-                    padding:
-                      "20px",
+                    textAlign: "center",
+                    padding: "20px",
                     boxSizing:
                       "border-box",
+                    opacity:
+                      isUploading
+                        ? 0.7
+                        : 1,
                   }}
                 >
                   <span
                     style={{
-                      fontSize:
-                        "32px",
+                      fontSize: "32px",
                       marginBottom:
                         "8px",
                     }}
                   >
-                    🖼️
+                    {isUploading
+                      ? "⏳"
+                      : "🖼️"}
                   </span>
 
                   <strong
                     style={{
-                      color:
-                        "#374151",
-                      fontSize:
-                        "15px",
+                      color: "#374151",
+                      fontSize: "15px",
                     }}
                   >
-                    Upload Course
-                    Image
+                    {isUploading
+                      ? "Uploading..."
+                      : "Upload Course Image"}
                   </strong>
 
                   <span
                     style={{
-                      marginTop:
-                        "5px",
-                      color:
-                        "#9ca3af",
-                      fontSize:
-                        "13px",
+                      marginTop: "5px",
+                      color: "#9ca3af",
+                      fontSize: "13px",
                     }}
                   >
-                    Click here to
-                    choose an image
+                    {isUploading
+                      ? "Please wait"
+                      : "Click here to choose an image"}
                   </span>
 
                   <input
@@ -2325,9 +1879,12 @@ function ManageCourse() {
                     onChange={
                       handleImageChange
                     }
+                    disabled={
+                      isUploading ||
+                      isSaving
+                    }
                     style={{
-                      display:
-                        "none",
+                      display: "none",
                     }}
                   />
                 </label>
@@ -2342,30 +1899,27 @@ function ManageCourse() {
                     "20px",
                   padding:
                     "12px 14px",
-                  borderRadius:
-                    "8px",
+                  borderRadius: "8px",
                   background:
                     saveMessage.includes(
                       "successfully"
                     )
                       ? "#ecfdf5"
                       : "#fff7ed",
-                  border:
-                    `1px solid ${
-                      saveMessage.includes(
-                        "successfully"
-                      )
-                        ? "#a7f3d0"
-                        : "#fed7aa"
-                    }`,
+                  border: `1px solid ${
+                    saveMessage.includes(
+                      "successfully"
+                    )
+                      ? "#a7f3d0"
+                      : "#fed7aa"
+                  }`,
                   color:
                     saveMessage.includes(
                       "successfully"
                     )
                       ? "#047857"
                       : "#c2410c",
-                  fontSize:
-                    "14px",
+                  fontSize: "14px",
                 }}
               >
                 {saveMessage}
@@ -2377,24 +1931,23 @@ function ManageCourse() {
               style={{
                 borderTop:
                   "1px solid #e5e7eb",
-                paddingTop:
-                  "22px",
-                display:
-                  "flex",
+                paddingTop: "22px",
+                display: "flex",
                 justifyContent:
                   "flex-end",
                 gap: "12px",
-                flexWrap:
-                  "wrap",
+                flexWrap: "wrap",
               }}
             >
               <button
                 type="button"
-                onClick={
-                  handleReset
-                }
+                onClick={handleReset}
                 style={
                   resetButtonStyle
+                }
+                disabled={
+                  isSaving ||
+                  isUploading
                 }
               >
                 Reset
@@ -2405,8 +1958,14 @@ function ManageCourse() {
                 style={
                   saveButtonStyle
                 }
+                disabled={
+                  isSaving ||
+                  isUploading
+                }
               >
-                {isNewCourse
+                {isSaving
+                  ? "Saving..."
+                  : isNewCourse
                   ? "Create Course"
                   : "Save Changes"}
               </button>
@@ -2418,9 +1977,11 @@ function ManageCourse() {
   );
 }
 
-/* =========================
-   Styles
-========================= */
+/*
+ * =========================================================
+ * STYLES
+ * =========================================================
+ */
 
 const labelStyle: CSSProperties = {
   display: "block",
@@ -2443,69 +2004,64 @@ const inputStyle: CSSProperties = {
   outline: "none",
 };
 
-const deleteButtonStyle: CSSProperties =
-  {
-    width: "42px",
-    height: "42px",
-    border:
-      "1px solid #fecaca",
-    borderRadius: "9px",
-    background: "#fff1f2",
-    color: "#dc2626",
-    cursor: "pointer",
-    fontSize: "16px",
-    flexShrink: 0,
-  };
+const deleteButtonStyle: CSSProperties = {
+  width: "42px",
+  height: "42px",
+  border:
+    "1px solid #fecaca",
+  borderRadius: "9px",
+  background: "#fff1f2",
+  color: "#dc2626",
+  cursor: "pointer",
+  fontSize: "16px",
+  flexShrink: 0,
+};
 
-const smallDeleteButtonStyle: CSSProperties =
-  {
-    border:
-      "1px solid #fecaca",
-    borderRadius: "7px",
-    background: "#fff1f2",
-    color: "#dc2626",
-    padding: "7px 10px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: 600,
-  };
+const smallDeleteButtonStyle: CSSProperties = {
+  border:
+    "1px solid #fecaca",
+  borderRadius: "7px",
+  background: "#fff1f2",
+  color: "#dc2626",
+  padding: "7px 10px",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 600,
+};
 
-const secondaryButtonStyle: CSSProperties =
-  {
-    padding: "12px 16px",
-    border:
-      "1px solid #d1d5db",
-    borderRadius: "9px",
-    background: "#ffffff",
-    color: "#374151",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: 600,
-  };
+const secondaryButtonStyle: CSSProperties = {
+  padding: "12px 16px",
+  border:
+    "1px solid #d1d5db",
+  borderRadius: "9px",
+  background: "#ffffff",
+  color: "#374151",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: 600,
+};
 
-const resetButtonStyle: CSSProperties =
-  {
-    padding: "12px 20px",
-    border:
-      "1px solid #d1d5db",
-    borderRadius: "9px",
-    background: "#ffffff",
-    color: "#374151",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: 600,
-  };
+const resetButtonStyle: CSSProperties = {
+  padding: "12px 20px",
+  border:
+    "1px solid #d1d5db",
+  borderRadius: "9px",
+  background: "#ffffff",
+  color: "#374151",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: 600,
+};
 
-const saveButtonStyle: CSSProperties =
-  {
-    padding: "12px 24px",
-    border: "none",
-    borderRadius: "9px",
-    background: "#111827",
-    color: "#ffffff",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: 600,
-  };
+const saveButtonStyle: CSSProperties = {
+  padding: "12px 24px",
+  border: "none",
+  borderRadius: "9px",
+  background: "#111827",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontSize: "14px",
+  fontWeight: 600,
+};
 
 export default ManageCourse;
