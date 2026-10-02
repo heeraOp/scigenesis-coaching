@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+
 import "./../styles/pages.css";
+
 import { getSessionToken } from "../services/auth";
 
-const API_URL =
-  import.meta.env.VITE_APPS_SCRIPT_URL;
+const API_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
 interface Enquiry {
   enquiry_id: string;
@@ -23,21 +24,15 @@ interface Enquiry {
 }
 
 function StudentEnquiries() {
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
 
-  const [enquiries, setEnquiries] =
-    useState<Enquiry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [error, setError] = useState("");
 
-  const [error, setError] =
-    useState("");
+  const [search, setSearch] = useState("");
 
-  const [search, setSearch] =
-    useState("");
-
-  const [statusFilter, setStatusFilter] =
-    useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const [selectedEnquiry, setSelectedEnquiry] =
     useState<Enquiry | null>(null);
@@ -45,15 +40,12 @@ function StudentEnquiries() {
   const [updatingId, setUpdatingId] =
     useState<string | null>(null);
 
-
   /* =====================================================
      LOAD ENQUIRIES
      ===================================================== */
 
   async function loadEnquiries() {
-
     try {
-
       setLoading(true);
       setError("");
 
@@ -71,11 +63,11 @@ function StudentEnquiries() {
         );
       }
 
-const response = await fetch(
-  `${API_URL}?action=getEnquiries&session_token=${encodeURIComponent(
-    sessionToken
-  )}`
-);;
+      const response = await fetch(
+        `${API_URL}?action=getEnquiries&session_token=${encodeURIComponent(
+          sessionToken
+        )}`
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -88,7 +80,7 @@ const response = await fetch(
       if (!data.success) {
         throw new Error(
           data.error ||
-          "Failed to load enquiries."
+            "Failed to load enquiries."
         );
       }
 
@@ -97,9 +89,7 @@ const response = await fetch(
           ? data.enquiries
           : []
       );
-
     } catch (err) {
-
       console.error(
         "Failed to load enquiries:",
         err
@@ -110,20 +100,14 @@ const response = await fetch(
           ? err.message
           : "Failed to load enquiries."
       );
-
     } finally {
-
       setLoading(false);
-
     }
-
   }
-
 
   useEffect(() => {
     loadEnquiries();
   }, []);
-
 
   /* =====================================================
      UPDATE STATUS
@@ -133,37 +117,52 @@ const response = await fetch(
     enquiry: Enquiry,
     newStatus: "NEW" | "CONTACTED" | "CLOSED"
   ) {
-
     try {
-
-      setUpdatingId(
-        enquiry.enquiry_id
-      );
-
+      setUpdatingId(enquiry.enquiry_id);
       setError("");
 
-      const response = await fetch(
-        API_URL,
-        {
-          method: "POST",
+      if (!API_URL) {
+        throw new Error(
+          "VITE_APPS_SCRIPT_URL is not configured."
+        );
+      }
 
-          headers: {
-            "Content-Type":
-              "text/plain;charset=utf-8"
-          },
+      /*
+       * IMPORTANT:
+       * Get the currently logged-in teacher's
+       * session token before making the request.
+       */
+      const sessionToken = getSessionToken();
 
-          body: JSON.stringify({
-            action:
-              "updateEnquiryStatus",
+      if (!sessionToken) {
+        throw new Error(
+          "Authentication required. Please log in again."
+        );
+      }
 
-            enquiry_id:
-              enquiry.enquiry_id,
+      const response = await fetch(API_URL, {
+        method: "POST",
 
-            status:
-              newStatus
-          })
-        }
-      );
+        headers: {
+          "Content-Type":
+            "text/plain;charset=utf-8",
+        },
+
+        body: JSON.stringify({
+          action: "updateEnquiryStatus",
+
+          /*
+           * IMPORTANT FIX:
+           * Send the authentication token
+           * to Google Apps Script.
+           */
+          session_token: sessionToken,
+
+          enquiry_id: enquiry.enquiry_id,
+
+          status: newStatus,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error(
@@ -171,32 +170,37 @@ const response = await fetch(
         );
       }
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!data.success) {
         throw new Error(
           data.error ||
-          "Failed to update enquiry status."
+            "Failed to update enquiry status."
         );
       }
 
-      setEnquiries(current =>
-        current.map(item =>
+      /*
+       * Update the enquiry in local React state
+       * so the UI changes immediately.
+       */
+      setEnquiries((current) =>
+        current.map((item) =>
           item.enquiry_id ===
           enquiry.enquiry_id
             ? {
                 ...item,
                 status: newStatus,
                 updated_at:
-                  new Date().toISOString()
+                  new Date().toISOString(),
               }
             : item
         )
       );
 
-      setSelectedEnquiry(current => {
-
+      /*
+       * Also update the currently opened modal.
+       */
+      setSelectedEnquiry((current) => {
         if (
           !current ||
           current.enquiry_id !==
@@ -209,13 +213,10 @@ const response = await fetch(
           ...current,
           status: newStatus,
           updated_at:
-            new Date().toISOString()
+            new Date().toISOString(),
         };
-
       });
-
     } catch (err) {
-
       console.error(
         "Status update failed:",
         err
@@ -226,114 +227,84 @@ const response = await fetch(
           ? err.message
           : "Failed to update status."
       );
-
     } finally {
-
       setUpdatingId(null);
-
     }
-
   }
-
 
   /* =====================================================
      SEARCH + FILTER
      ===================================================== */
 
-  const filteredEnquiries =
-    useMemo(() => {
+  const filteredEnquiries = useMemo(() => {
+    const query =
+      search.trim().toLowerCase();
 
-      const query =
-        search.trim().toLowerCase();
+    return enquiries.filter((enquiry) => {
+      const searchableText = [
+        enquiry.student_name,
+        enquiry.parent_name,
+        enquiry.phone,
+        enquiry.email,
+        enquiry.class_level,
+        enquiry.board,
+        enquiry.course_interest,
+        enquiry.message,
+        enquiry.enquiry_id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-      return enquiries.filter(
-        enquiry => {
+      const matchesSearch =
+        !query ||
+        searchableText.includes(query);
 
-          const searchableText = [
-            enquiry.student_name,
-            enquiry.parent_name,
-            enquiry.phone,
-            enquiry.email,
-            enquiry.class_level,
-            enquiry.board,
-            enquiry.course_interest,
-            enquiry.message,
-            enquiry.enquiry_id
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        enquiry.status === statusFilter;
 
-          const matchesSearch =
-            !query ||
-            searchableText.includes(query);
-
-          const matchesStatus =
-            statusFilter === "ALL" ||
-            enquiry.status ===
-              statusFilter;
-
-          return (
-            matchesSearch &&
-            matchesStatus
-          );
-
-        }
+      return (
+        matchesSearch &&
+        matchesStatus
       );
-
-    }, [
-      enquiries,
-      search,
-      statusFilter
-    ]);
-
+    });
+  }, [
+    enquiries,
+    search,
+    statusFilter,
+  ]);
 
   /* =====================================================
      STATISTICS
      ===================================================== */
 
-  const total =
-    enquiries.length;
+  const total = enquiries.length;
 
-  const newCount =
-    enquiries.filter(
-      item =>
-        item.status === "NEW"
-    ).length;
+  const newCount = enquiries.filter(
+    (item) => item.status === "NEW"
+  ).length;
 
-  const contactedCount =
-    enquiries.filter(
-      item =>
-        item.status === "CONTACTED"
-    ).length;
+  const contactedCount = enquiries.filter(
+    (item) => item.status === "CONTACTED"
+  ).length;
 
-  const closedCount =
-    enquiries.filter(
-      item =>
-        item.status === "CLOSED"
-    ).length;
-
+  const closedCount = enquiries.filter(
+    (item) => item.status === "CLOSED"
+  ).length;
 
   /* =====================================================
      FORMAT DATE
      ===================================================== */
 
-  function formatDate(
-    value: string
-  ) {
-
+  function formatDate(value: string) {
     if (!value) {
       return "—";
     }
 
-    const date =
-      new Date(value);
+    const date = new Date(value);
 
-    if (
-      Number.isNaN(
-        date.getTime()
-      )
-    ) {
+    if (Number.isNaN(date.getTime())) {
       return value;
     }
 
@@ -344,51 +315,45 @@ const response = await fetch(
         month: "short",
         year: "numeric",
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
       }
     );
-
   }
-
 
   /* =====================================================
      STATUS STYLE
      ===================================================== */
 
-  function getStatusStyle(
-    status: string
-  ) {
-
+  function getStatusStyle(status: string) {
     if (status === "NEW") {
       return {
         background: "#eff6ff",
-        color: "#1d4ed8"
+        color: "#1d4ed8",
       };
     }
 
     if (status === "CONTACTED") {
       return {
         background: "#ecfdf3",
-        color: "#15803d"
+        color: "#15803d",
       };
     }
 
     return {
       background: "#f2f4f7",
-      color: "#475467"
+      color: "#475467",
     };
-
   }
 
-
   return (
-
     <main className="teacher-page">
-
       <div className="container">
 
-        <header className="teacher-header">
+        {/* =================================================
+            HEADER
+            ================================================= */}
 
+        <header className="teacher-header">
           <span className="page-label">
             Teacher Dashboard
           </span>
@@ -401,9 +366,7 @@ const response = await fetch(
             View enquiries, contact students
             and update their enquiry status.
           </p>
-
         </header>
-
 
         {/* =================================================
             STATISTICS
@@ -415,10 +378,9 @@ const response = await fetch(
             gridTemplateColumns:
               "repeat(4, minmax(0, 1fr))",
             gap: "16px",
-            marginBottom: "24px"
+            marginBottom: "24px",
           }}
         >
-
           <StatCard
             label="TOTAL ENQUIRIES"
             value={total}
@@ -438,9 +400,7 @@ const response = await fetch(
             label="CLOSED"
             value={closedCount}
           />
-
         </div>
-
 
         {/* =================================================
             ENQUIRY LIST
@@ -448,26 +408,25 @@ const response = await fetch(
 
         <div className="page-card">
 
+          {/* SEARCH + FILTER */}
+
           <div
             style={{
               display: "flex",
               gap: "12px",
               marginBottom: "20px",
-              flexWrap: "wrap"
+              flexWrap: "wrap",
             }}
           >
-
             <input
               type="text"
               value={search}
-              onChange={event =>
+              onChange={(event) =>
                 setSearch(
                   event.target.value
                 )
               }
-              placeholder={
-                "Search student, phone, email, course or message..."
-              }
+              placeholder="Search student, phone, email, course or message..."
               style={{
                 flex: 1,
                 minWidth: "260px",
@@ -475,15 +434,14 @@ const response = await fetch(
                   "12px 14px",
                 border:
                   "1px solid #d0d5dd",
-                borderRadius:
-                  "8px",
-                fontSize: "14px"
+                borderRadius: "8px",
+                fontSize: "14px",
               }}
             />
 
             <select
               value={statusFilter}
-              onChange={event =>
+              onChange={(event) =>
                 setStatusFilter(
                   event.target.value
                 )
@@ -493,12 +451,10 @@ const response = await fetch(
                   "12px 14px",
                 border:
                   "1px solid #d0d5dd",
-                borderRadius:
-                  "8px",
-                background: "#fff"
+                borderRadius: "8px",
+                background: "#fff",
               }}
             >
-
               <option value="ALL">
                 All Status
               </option>
@@ -514,7 +470,6 @@ const response = await fetch(
               <option value="CLOSED">
                 Closed
               </option>
-
             </select>
 
             <button
@@ -526,67 +481,55 @@ const response = await fetch(
                   "12px 18px",
                 border:
                   "1px solid #d0d5dd",
-                borderRadius:
-                  "8px",
+                borderRadius: "8px",
                 background: "#fff",
-                cursor:
-                  loading
-                    ? "not-allowed"
-                    : "pointer",
-                fontWeight: 600
+                cursor: loading
+                  ? "not-allowed"
+                  : "pointer",
+                fontWeight: 600,
               }}
             >
               {loading
                 ? "Loading..."
                 : "Refresh"}
             </button>
-
           </div>
 
+          {/* ERROR */}
 
           {error && (
-
             <div
               style={{
-                marginBottom:
-                  "20px",
+                marginBottom: "20px",
                 padding: "14px",
-                borderRadius:
-                  "8px",
-                background:
-                  "#fff1f2",
+                borderRadius: "8px",
+                background: "#fff1f2",
                 border:
                   "1px solid #fecdd3",
-                color: "#be123c"
+                color: "#be123c",
               }}
             >
               {error}
             </div>
-
           )}
 
+          {/* TABLE */}
 
           {loading ? (
-
             <div
               style={{
                 padding: "50px",
-                textAlign:
-                  "center",
-                color: "#667085"
+                textAlign: "center",
+                color: "#667085",
               }}
             >
               Loading enquiries...
             </div>
-
           ) : (
-
             <div className="table-wrapper">
-
               <table className="data-table">
 
                 <thead>
-
                   <tr>
                     <th>Student</th>
                     <th>Phone</th>
@@ -595,36 +538,30 @@ const response = await fetch(
                     <th>Status</th>
                     <th>Action</th>
                   </tr>
-
                 </thead>
 
                 <tbody>
-
                   {filteredEnquiries.length ===
                   0 ? (
-
                     <tr>
                       <td colSpan={6}>
                         {enquiries.length === 0
                           ? "No enquiries found."
-                          : "No enquiries match your search."
-                        }
+                          : "No enquiries match your search."}
                       </td>
                     </tr>
-
                   ) : (
-
                     filteredEnquiries.map(
-                      enquiry => (
-
+                      (enquiry) => (
                         <tr
                           key={
                             enquiry.enquiry_id
                           }
                         >
 
-                          <td>
+                          {/* STUDENT */}
 
+                          <td>
                             <strong>
                               {
                                 enquiry.student_name
@@ -639,7 +576,7 @@ const response = await fetch(
                                   color:
                                     "#667085",
                                   marginTop:
-                                    "4px"
+                                    "4px",
                                 }}
                               >
                                 Parent:{" "}
@@ -648,14 +585,13 @@ const response = await fetch(
                                 }
                               </div>
                             )}
-
                           </td>
+
+                          {/* PHONE */}
 
                           <td>
                             <a
-                              href={
-                                `tel:${enquiry.phone}`
-                              }
+                              href={`tel:${enquiry.phone}`}
                             >
                               {
                                 enquiry.phone
@@ -663,9 +599,12 @@ const response = await fetch(
                             </a>
                           </td>
 
-                          <td>
+                          {/* CLASS */}
 
-                            {enquiry.class_level}
+                          <td>
+                            {
+                              enquiry.class_level
+                            }
 
                             <div
                               style={{
@@ -674,15 +613,16 @@ const response = await fetch(
                                 color:
                                   "#667085",
                                 marginTop:
-                                  "4px"
+                                  "4px",
                               }}
                             >
                               {
                                 enquiry.board
                               }
                             </div>
-
                           </td>
+
+                          {/* COURSE */}
 
                           <td>
                             {
@@ -690,8 +630,9 @@ const response = await fetch(
                             }
                           </td>
 
-                          <td>
+                          {/* STATUS */}
 
+                          <td>
                             <span
                               style={{
                                 display:
@@ -702,11 +643,11 @@ const response = await fetch(
                                   "999px",
                                 fontSize:
                                   "12px",
-                                fontWeight:
-                                  700,
+                                fontWeight: 700,
                                 ...getStatusStyle(
-                                  enquiry.status
-                                )
+                                  enquiry.status ||
+                                    "NEW"
+                                ),
                               }}
                             >
                               {
@@ -714,11 +655,11 @@ const response = await fetch(
                                 "NEW"
                               }
                             </span>
-
                           </td>
 
-                          <td>
+                          {/* ACTION */}
 
+                          <td>
                             <button
                               type="button"
                               onClick={() =>
@@ -737,41 +678,30 @@ const response = await fetch(
                                   "#fff",
                                 cursor:
                                   "pointer",
-                                fontWeight:
-                                  600
+                                fontWeight: 600,
                               }}
                             >
                               View
                             </button>
-
                           </td>
 
                         </tr>
-
                       )
                     )
-
                   )}
-
                 </tbody>
 
               </table>
-
             </div>
-
           )}
-
         </div>
-
       </div>
-
 
       {/* ===================================================
           DETAILS MODAL
           =================================================== */}
 
       {selectedEnquiry && (
-
         <div
           onClick={() =>
             setSelectedEnquiry(null)
@@ -782,63 +712,51 @@ const response = await fetch(
             background:
               "rgba(15, 23, 42, 0.55)",
             display: "flex",
-            alignItems:
-              "center",
-            justifyContent:
-              "center",
+            alignItems: "center",
+            justifyContent: "center",
             padding: "24px",
-            zIndex: 1000
+            zIndex: 1000,
           }}
         >
-
           <div
-            onClick={event =>
+            onClick={(event) =>
               event.stopPropagation()
             }
             style={{
               width:
                 "min(760px, 100%)",
-              maxHeight:
-                "90vh",
-              overflowY:
-                "auto",
-              background:
-                "#fff",
-              borderRadius:
-                "16px",
-              padding:
-                "28px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "28px",
               boxShadow:
-                "0 20px 60px rgba(0,0,0,.2)"
+                "0 20px 60px rgba(0,0,0,.2)",
             }}
           >
 
+            {/* MODAL HEADER */}
+
             <div
               style={{
-                display:
-                  "flex",
+                display: "flex",
                 justifyContent:
                   "space-between",
                 gap: "20px",
                 alignItems:
                   "flex-start",
-                marginBottom:
-                  "24px"
+                marginBottom: "24px",
               }}
             >
-
               <div>
 
                 <div
                   style={{
-                    fontSize:
-                      "13px",
-                    fontWeight:
-                      700,
-                    color:
-                      "#667085",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#667085",
                     textTransform:
-                      "uppercase"
+                      "uppercase",
                   }}
                 >
                   Enquiry Details
@@ -848,8 +766,7 @@ const response = await fetch(
                   style={{
                     margin:
                       "6px 0 0",
-                    fontSize:
-                      "28px"
+                    fontSize: "28px",
                   }}
                 >
                   {
@@ -862,94 +779,69 @@ const response = await fetch(
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedEnquiry(
-                    null
-                  )
+                  setSelectedEnquiry(null)
                 }
                 style={{
-                  border:
-                    "none",
-                  background:
-                    "#f2f4f7",
-                  borderRadius:
-                    "50%",
-                  width:
-                    "38px",
-                  height:
-                    "38px",
-                  cursor:
-                    "pointer",
-                  fontSize:
-                    "20px"
+                  border: "none",
+                  background: "#f2f4f7",
+                  borderRadius: "50%",
+                  width: "38px",
+                  height: "38px",
+                  cursor: "pointer",
+                  fontSize: "20px",
                 }}
               >
                 ×
               </button>
-
             </div>
-
 
             {/* STATUS */}
 
             <div
               style={{
-                display:
-                  "flex",
+                display: "flex",
                 justifyContent:
                   "space-between",
-                alignItems:
-                  "center",
-                padding:
-                  "14px",
-                borderRadius:
-                  "10px",
-                background:
-                  "#f8fafc",
-                marginBottom:
-                  "22px"
+                alignItems: "center",
+                padding: "14px",
+                borderRadius: "10px",
+                background: "#f8fafc",
+                marginBottom: "22px",
               }}
             >
-
               <strong>
                 Current Status
               </strong>
 
               <span
                 style={{
-                  padding:
-                    "6px 12px",
-                  borderRadius:
-                    "999px",
-                  fontWeight:
-                    700,
+                  padding: "6px 12px",
+                  borderRadius: "999px",
+                  fontWeight: 700,
                   ...getStatusStyle(
-                    selectedEnquiry.status
-                  )
+                    selectedEnquiry.status ||
+                      "NEW"
+                  ),
                 }}
               >
                 {
-                  selectedEnquiry.status
+                  selectedEnquiry.status ||
+                  "NEW"
                 }
               </span>
-
             </div>
-
 
             {/* COMPLETE DETAILS */}
 
             <div
               style={{
-                display:
-                  "grid",
+                display: "grid",
                 gridTemplateColumns:
                   "1fr 1fr",
-                gap:
-                  "18px",
-                marginBottom:
-                  "22px"
+                gap: "18px",
+                marginBottom: "22px",
               }}
             >
-
               <Detail
                 label="Respondent"
                 value={
@@ -1008,20 +900,16 @@ const response = await fetch(
 
               <Detail
                 label="Submitted"
-                value={
-                  formatDate(
-                    selectedEnquiry.submitted_at
-                  )
-                }
+                value={formatDate(
+                  selectedEnquiry.submitted_at
+                )}
               />
 
               <Detail
                 label="Last Updated"
-                value={
-                  formatDate(
-                    selectedEnquiry.updated_at
-                  )
-                }
+                value={formatDate(
+                  selectedEnquiry.updated_at
+                )}
               />
 
               <Detail
@@ -1030,29 +918,21 @@ const response = await fetch(
                   selectedEnquiry.enquiry_id
                 }
               />
-
             </div>
-
 
             {/* MESSAGE */}
 
             <div
               style={{
-                marginBottom:
-                  "24px"
+                marginBottom: "24px",
               }}
             >
-
               <div
                 style={{
-                  fontSize:
-                    "13px",
-                  fontWeight:
-                    700,
-                  color:
-                    "#667085",
-                  marginBottom:
-                    "7px"
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: "#667085",
+                  marginBottom: "7px",
                 }}
               >
                 STUDENT / PARENT ENQUIRY
@@ -1060,16 +940,11 @@ const response = await fetch(
 
               <div
                 style={{
-                  padding:
-                    "16px",
-                  background:
-                    "#f8fafc",
-                  borderRadius:
-                    "10px",
-                  lineHeight:
-                    1.6,
-                  whiteSpace:
-                    "pre-wrap"
+                  padding: "16px",
+                  background: "#f8fafc",
+                  borderRadius: "10px",
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
                 }}
               >
                 {
@@ -1077,76 +952,61 @@ const response = await fetch(
                   "No message provided."
                 }
               </div>
-
             </div>
-
 
             {/* ACTIONS */}
 
             <div
               style={{
-                display:
-                  "flex",
-                gap:
-                  "10px",
-                flexWrap:
-                  "wrap"
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
               }}
             >
 
+              {/* CALL */}
+
               <a
-                href={
-                  `tel:${selectedEnquiry.phone}`
-                }
+                href={`tel:${selectedEnquiry.phone}`}
                 style={{
                   padding:
                     "11px 16px",
-                  borderRadius:
-                    "8px",
-                  background:
-                    "#111827",
-                  color:
-                    "#fff",
+                  borderRadius: "8px",
+                  background: "#111827",
+                  color: "#fff",
                   textDecoration:
                     "none",
-                  fontWeight:
-                    700
+                  fontWeight: 700,
                 }}
               >
                 📞 Call Student
               </a>
 
+              {/* EMAIL */}
 
               {selectedEnquiry.email && (
-
                 <a
-                  href={
-                    `mailto:${selectedEnquiry.email}`
-                  }
+                  href={`mailto:${selectedEnquiry.email}`}
                   style={{
                     padding:
                       "11px 16px",
-                    borderRadius:
-                      "8px",
+                    borderRadius: "8px",
                     border:
                       "1px solid #d0d5dd",
-                    color:
-                      "#111827",
+                    color: "#111827",
                     textDecoration:
                       "none",
-                    fontWeight:
-                      700
+                    fontWeight: 700,
                   }}
                 >
                   ✉️ Email
                 </a>
-
               )}
 
+              {/* MARK AS CONTACTED */}
 
               {selectedEnquiry.status !==
                 "CONTACTED" && (
-
                 <button
                   type="button"
                   disabled={
@@ -1162,33 +1022,36 @@ const response = await fetch(
                   style={{
                     padding:
                       "11px 16px",
-                    borderRadius:
-                      "8px",
+                    borderRadius: "8px",
                     border:
                       "1px solid #16a34a",
                     background:
                       "#16a34a",
-                    color:
-                      "#fff",
+                    color: "#fff",
                     cursor:
-                      "pointer",
-                    fontWeight:
-                      700
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: 700,
+                    opacity:
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? 0.7
+                        : 1,
                   }}
                 >
                   {updatingId ===
                   selectedEnquiry.enquiry_id
                     ? "Updating..."
-                    : "✓ Mark as Contacted"
-                  }
+                    : "✓ Mark as Contacted"}
                 </button>
-
               )}
 
+              {/* MARK AS NOT CONTACTED */}
 
               {selectedEnquiry.status ===
                 "CONTACTED" && (
-
                 <button
                   type="button"
                   disabled={
@@ -1204,33 +1067,35 @@ const response = await fetch(
                   style={{
                     padding:
                       "11px 16px",
-                    borderRadius:
-                      "8px",
+                    borderRadius: "8px",
                     border:
                       "1px solid #2563eb",
-                    background:
-                      "#fff",
-                    color:
-                      "#2563eb",
+                    background: "#fff",
+                    color: "#2563eb",
                     cursor:
-                      "pointer",
-                    fontWeight:
-                      700
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: 700,
+                    opacity:
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? 0.7
+                        : 1,
                   }}
                 >
                   {updatingId ===
                   selectedEnquiry.enquiry_id
                     ? "Updating..."
-                    : "↩ Mark as Not Contacted"
-                  }
+                    : "↩ Mark as Not Contacted"}
                 </button>
-
               )}
 
+              {/* CLOSE */}
 
               {selectedEnquiry.status !==
                 "CLOSED" && (
-
                 <button
                   type="button"
                   disabled={
@@ -1246,29 +1111,32 @@ const response = await fetch(
                   style={{
                     padding:
                       "11px 16px",
-                    borderRadius:
-                      "8px",
+                    borderRadius: "8px",
                     border:
                       "1px solid #d0d5dd",
-                    background:
-                      "#fff",
-                    color:
-                      "#344054",
+                    background: "#fff",
+                    color: "#344054",
                     cursor:
-                      "pointer",
-                    fontWeight:
-                      700
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: 700,
+                    opacity:
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? 0.7
+                        : 1,
                   }}
                 >
                   Close Enquiry
                 </button>
-
               )}
 
+              {/* REOPEN */}
 
               {selectedEnquiry.status ===
                 "CLOSED" && (
-
                 <button
                   type="button"
                   disabled={
@@ -1284,39 +1152,35 @@ const response = await fetch(
                   style={{
                     padding:
                       "11px 16px",
-                    borderRadius:
-                      "8px",
+                    borderRadius: "8px",
                     border:
                       "1px solid #2563eb",
-                    background:
-                      "#fff",
-                    color:
-                      "#2563eb",
+                    background: "#fff",
+                    color: "#2563eb",
                     cursor:
-                      "pointer",
-                    fontWeight:
-                      700
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: 700,
+                    opacity:
+                      updatingId ===
+                      selectedEnquiry.enquiry_id
+                        ? 0.7
+                        : 1,
                   }}
                 >
                   Reopen Enquiry
                 </button>
-
               )}
 
             </div>
-
           </div>
-
         </div>
-
       )}
-
     </main>
-
   );
-
 }
-
 
 /* =========================================================
    STAT CARD
@@ -1324,24 +1188,18 @@ const response = await fetch(
 
 function StatCard({
   label,
-  value
+  value,
 }: {
   label: string;
   value: number;
 }) {
-
   return (
-
     <div className="page-card">
-
       <div
         style={{
-          color:
-            "#667085",
-          fontWeight:
-            700,
-          fontSize:
-            "14px"
+          color: "#667085",
+          fontWeight: 700,
+          fontSize: "14px",
         }}
       >
         {label}
@@ -1349,23 +1207,16 @@ function StatCard({
 
       <div
         style={{
-          fontSize:
-            "34px",
-          fontWeight:
-            700,
-          marginTop:
-            "8px"
+          fontSize: "34px",
+          fontWeight: 700,
+          marginTop: "8px",
         }}
       >
         {value}
       </div>
-
     </div>
-
   );
-
 }
-
 
 /* =========================================================
    DETAIL
@@ -1373,28 +1224,20 @@ function StatCard({
 
 function Detail({
   label,
-  value
+  value,
 }: {
   label: string;
   value: string;
 }) {
-
   return (
-
     <div>
-
       <div
         style={{
-          fontSize:
-            "12px",
-          fontWeight:
-            700,
-          color:
-            "#667085",
-          marginBottom:
-            "5px",
-          textTransform:
-            "uppercase"
+          fontSize: "12px",
+          fontWeight: 700,
+          color: "#667085",
+          marginBottom: "5px",
+          textTransform: "uppercase",
         }}
       >
         {label}
@@ -1402,22 +1245,15 @@ function Detail({
 
       <div
         style={{
-          fontSize:
-            "15px",
-          color:
-            "#101828",
-          wordBreak:
-            "break-word"
+          fontSize: "15px",
+          color: "#101828",
+          wordBreak: "break-word",
         }}
       >
         {value || "—"}
       </div>
-
     </div>
-
   );
-
 }
-
 
 export default StudentEnquiries;

@@ -1,0 +1,246 @@
+.gallery-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.gallery-editor-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.gallery-editor-heading h2,
+.gallery-manager-info h2 {
+  margin: 0;
+}
+
+.gallery-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-field small {
+  opacity: 0.55;
+}
+
+.gallery-upload-preview {
+  overflow: hidden;
+  max-width: 420px;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: #eef1f4;
+}
+
+.gallery-upload-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.gallery-submit {
+  width: 100%;
+}
+
+.gallery-manager-info {
+  position: sticky;
+  top: 25px;
+}
+
+.gallery-manager-info ul {
+  display: grid;
+  gap: 13px;
+  margin: 22px 0 0;
+  padding-left: 20px;
+  line-height: 1.65;
+}
+
+.manage-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 25px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+
+.manage-alert.success {
+  border-color: rgba(30, 120, 65, 0.25);
+}
+
+.manage-alert.error {
+  border-color: rgba(170, 30, 30, 0.25);
+}
+
+.manage-alert button {
+  border: 0;
+  background: transparent;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+.gallery-manager-list-section {
+  padding-bottom: 0;
+}
+
+.gallery-count {
+  opacity: 0.6;
+  font-size: 0.9rem;
+}
+
+.gallery-manager-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px auto;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.gallery-manager-controls input,
+.gallery-manager-controls select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+
+.gallery-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.gallery-admin-card {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.gallery-admin-image {
+  min-height: 180px;
+  background: #eef1f4;
+}
+
+.gallery-admin-image span {
+  display: grid;
+  height: 100%;
+  min-height: 180px;
+  place-items: center;
+  opacity: 0.5;
+}
+
+.gallery-admin-body {
+  min-width: 0;
+  padding: 18px;
+}
+
+.gallery-admin-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.gallery-admin-body h3 {
+  margin: 0 0 7px;
+}
+
+.gallery-admin-body p {
+  margin: 0 0 15px;
+  line-height: 1.55;
+  opacity: 0.65;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.gallery-status {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.status-published {
+  background: rgba(30, 120, 65, 0.1);
+}
+
+.status-draft {
+  background: rgba(180, 120, 20, 0.12);
+}
+
+.status-archived {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.gallery-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gallery-admin-actions .page-button {
+  padding: 8px 11px;
+  font-size: 0.78rem;
+}
+
+.gallery-danger-button {
+  border-color: rgba(170, 30, 30, 0.3);
+  color: #9d2222;
+  background: transparent;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 1000px) {
+  .gallery-manager-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-manager-info {
+    position: static;
+  }
+
+  .gallery-admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .gallery-form-row,
+  .gallery-manager-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-admin-card {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-admin-image {
+    aspect-ratio: 16 / 10;
+    min-height: 0;
+  }
+
+  .gallery-admin-image span {
+    min-height: 0;
+  }
+}
